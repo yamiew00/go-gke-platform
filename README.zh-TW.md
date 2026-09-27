@@ -81,9 +81,9 @@ scripts/                 PowerShell 輔助腳本，讓 gcloud 帳號和 kubeconf
 ./scripts/tf.ps1 platform plan -out=platform.tfplan
 ./scripts/tf.ps1 platform apply platform.tfplan
 
-# 3. 把輸出值設成 GitHub Actions 的 repository variables
-./scripts/tf.ps1 platform output -json github_actions_variables
-#    接著對每個 key 執行：gh variable set <NAME> --body <value>
+# 3. 把輸出值同步成 GitHub Actions 的 repository variables（需先執行 gh auth login）
+#    每次重建後都要再跑一次：OIDC pool 會換新 ID，WIF_PROVIDER 會跟著變
+./scripts/sync-gh-vars.ps1
 ```
 
 接著到 Actions 分頁執行 **deploy** workflow。它對每個 commit 只 build 一次 image，

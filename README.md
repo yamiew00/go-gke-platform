@@ -82,9 +82,9 @@ and `github_repository` if you fork.
 ./scripts/tf.ps1 platform plan -out=platform.tfplan
 ./scripts/tf.ps1 platform apply platform.tfplan
 
-# 3. Hand the outputs to GitHub Actions as repository variables
-./scripts/tf.ps1 platform output -json github_actions_variables
-#    then: gh variable set <NAME> --body <value>   (for each key)
+# 3. Copy the outputs into GitHub Actions repository variables (needs `gh auth login`).
+#    Re-run after every re-create: the OIDC pool gets a new ID, so WIF_PROVIDER changes.
+./scripts/sync-gh-vars.ps1
 ```
 
 Then run the **deploy** workflow from the Actions tab. It builds the image once per commit, deploys it
