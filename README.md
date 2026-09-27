@@ -109,6 +109,24 @@ On macOS or Linux, call `terraform -chdir=infra/<stack> ...` directly.
 | Rotate the secret | Bump `secret_data_wo_version` in `infra/platform/secrets.tf`, apply, then restart the pods |
 | Inspect | `kubectl -n app get pods,hpa,pdb` · Logs Explorer shows the JSON logs with proper severities |
 
+## Verified behaviour
+
+Measured on the live cluster with an in-cluster client calling the Service every 100–200 ms:
+
+| Scenario | Result |
+|---|---|
+| `kubectl rollout restart` of both replicas | **0 failed out of 1,269 requests**: readiness turns 503 first, the pod keeps serving for 5 s, then drains |
+| Deploying a commit whose pods can never start | Helm marked revision 2 failed and rolled back to revision 1 on its own; **0 failed out of 3,502 requests**, because `maxUnavailable: 0` keeps the old pods until new ones are ready |
+| Pod reading `demo-api-key` | Loaded through the GKE metadata server; the secret's IAM policy lists only `ns/app/sa/go-gke-platform` |
+
+## Problems hit on the first real deploy
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Identity Pool does not exist (go-gke-platform.svc.id.goog)` | GKE creates that pool with the first cluster, but the IAM principal string does not reference the cluster, so Terraform ran both in parallel | Explicit `depends_on` on the cluster |
+| `invalid tag "...go-gke-platform\r:<sha>"` | Repository variables were set from Windows output with CRLF line endings | Strip `\r` before `gh variable set` |
+| `container has runAsNonRoot and image has non-numeric user (nonroot)` | The kubelet cannot prove a user *name* is not root | `USER 65532:65532` in the Dockerfile |
+
 ## Cost and teardown
 
 The GKE free tier covers the management fee of one Autopilot cluster per billing account; Autopilot

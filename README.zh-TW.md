@@ -108,6 +108,24 @@ macOS 或 Linux 可以直接執行 `terraform -chdir=infra/<stack> ...`。
 | 輪替 secret | 調高 `infra/platform/secrets.tf` 的 `secret_data_wo_version`，apply 後重啟 Pod |
 | 檢查狀態 | `kubectl -n app get pods,hpa,pdb`；Logs Explorer 會以正確的 severity 顯示 JSON log |
 
+## 實測結果
+
+在實際運作的叢集上，用叢集內的 client 每 100–200 毫秒呼叫一次 Service：
+
+| 情境 | 結果 |
+|---|---|
+| 對兩個副本執行 `kubectl rollout restart` | **1,269 個請求、0 個失敗**：readiness 先變 503，Pod 再撐 5 秒，最後才排空關閉 |
+| 部署一個 Pod 永遠起不來的 commit | Helm 把第 2 版標記為失敗並自動回滾到第 1 版；**3,502 個請求、0 個失敗**，因為 `maxUnavailable: 0` 會讓舊 Pod 撐到新 Pod 就緒為止 |
+| Pod 讀取 `demo-api-key` | 透過 GKE metadata server 讀取成功；這個 secret 的 IAM 政策只列出 `ns/app/sa/go-gke-platform` |
+
+## 第一次實際部署遇到的問題
+
+| 症狀 | 原因 | 修法 |
+|---|---|---|
+| `Identity Pool does not exist (go-gke-platform.svc.id.goog)` | 這個 pool 是 GKE 建第一個叢集時才產生的，但 IAM principal 字串沒有引用叢集，Terraform 就把兩者平行執行 | 對叢集加上明確的 `depends_on` |
+| `invalid tag "...go-gke-platform\r:<sha>"` | repository variables 是從 Windows 的輸出設定的，帶著 CRLF 換行 | 執行 `gh variable set` 前先去掉 `\r` |
+| `container has runAsNonRoot and image has non-numeric user (nonroot)` | kubelet 無法證明一個使用者「名稱」不是 root | Dockerfile 改用 `USER 65532:65532` |
+
 ## 成本與清除資源
 
 GKE 免費額度會抵掉每個帳單帳戶一個 Autopilot 叢集的管理費；之後 Autopilot 依 Pod 的資源請求計費
