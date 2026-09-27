@@ -1,0 +1,57 @@
+name: ci
+
+# Runs on every push and pull request. Needs no cloud credentials: it proves the code,
+# the infrastructure definition, and the chart are valid before anything is deployed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Go vet, test, and image build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: app/go.mod
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "Not gofmt-ed:"; echo "$unformatted"; exit 1; fi
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: Build image (not pushed)
+        run: docker build --build-arg VERSION="${GITHUB_SHA::12}" -t go-gke-platform:ci .
+
+  infra:
+    name: Terraform fmt and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra
+      - name: terraform validate
+        run: |
+          for stack in bootstrap platform; do
+            terraform -chdir="infra/$stack" init -backend=false -input=false
+            terraform -chdir="infra/$stack" validate
+          done
+
+  chart:
+    name: Helm lint and render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+      - run: helm lint deploy/helm/go-gke-platform --set image.tag=ci
+      - run: helm template go-gke-platform deploy/helm/go-gke-platform --set image.tag=ci > /dev/null

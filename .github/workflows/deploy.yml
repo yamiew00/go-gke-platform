@@ -1,0 +1,92 @@
+name: deploy
+
+# Deploys only when someone asks for it: pushing to main never changes the running
+# environment. To roll back, run this workflow again with an older commit SHA.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA to deploy (empty = head of main). An older SHA rolls back.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write # lets the job request a GitHub OIDC token for Workload Identity Federation
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never cut a rollout off halfway
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  CLUSTER: ${{ vars.GKE_CLUSTER }}
+  IMAGE: ${{ vars.IMAGE_REPOSITORY }}
+  NAMESPACE: app
+  RELEASE: go-gke-platform
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Resolve image tag (short commit SHA)
+        id: meta
+        run: echo "tag=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      # No key file: GitHub's OIDC token is exchanged for short-lived credentials of gha-deployer.
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push image (reused if this SHA was already built)
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          if gcloud artifacts docker images describe "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+            echo "${IMAGE}:${TAG} already exists; reusing it."
+          else
+            docker build --build-arg VERSION="${TAG}" -t "${IMAGE}:${TAG}" app
+            docker push "${IMAGE}:${TAG}"
+          fi
+
+      - uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ env.CLUSTER }}
+          location: ${{ env.REGION }}
+
+      - uses: azure/setup-helm@v5
+
+      - name: Helm upgrade (rolls back automatically if pods never become ready)
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          helm upgrade --install "${RELEASE}" deploy/helm/go-gke-platform \
+            --namespace "${NAMESPACE}" --create-namespace \
+            --set image.repository="${IMAGE}" \
+            --set image.tag="${TAG}" \
+            --set config.projectId="${PROJECT_ID}" \
+            --wait --rollback-on-failure --timeout 10m
+
+      - name: Smoke test from inside the cluster
+        run: helm test "${RELEASE}" --namespace "${NAMESPACE}" --timeout 3m --logs
+
+      - name: Summary
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          {
+            echo "### Deployed \`${TAG}\` to \`${CLUSTER}\`"
+            echo '```'
+            helm history "${RELEASE}" --namespace "${NAMESPACE}" --max 5
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
