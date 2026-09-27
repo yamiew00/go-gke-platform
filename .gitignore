@@ -1,0 +1,24 @@
+# Terraform: providers, state, and plans never belong in git. Lock files do.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Credentials for the lab cluster (see scripts/use-cluster.ps1)
+.kube/
+
+# Go build output
+app/server
+app/*.exe
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
