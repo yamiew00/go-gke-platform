@@ -11,5 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w -X main.version=
 FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /out/server /server
 EXPOSE 8080
-USER nonroot:nonroot
+# Numeric UID of distroless "nonroot": with runAsNonRoot the kubelet refuses a user *name*,
+# because it cannot prove the name does not map to UID 0.
+USER 65532:65532
 ENTRYPOINT ["/server"]
