@@ -1,5 +1,7 @@
 # go-gke-platform
 
+English | [繁體中文](README.zh-TW.md)
+
 [![ci](https://github.com/yamiew00/go-gke-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/yamiew00/go-gke-platform/actions/workflows/ci.yml)
 
 A small Go service and everything needed to ship it to **GKE Autopilot**. Terraform defines the
