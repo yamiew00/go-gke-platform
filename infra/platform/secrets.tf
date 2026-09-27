@@ -26,4 +26,9 @@ resource "google_secret_manager_secret_iam_member" "app_reads_demo" {
   secret_id = google_secret_manager_secret.demo.id
   role      = "roles/secretmanager.secretAccessor"
   member    = local.app_principal
+
+  # The PROJECT_ID.svc.id.goog pool behind local.app_principal is created by GKE together with
+  # the first cluster. Nothing in the principal string references the cluster, so without this
+  # the binding runs in parallel and fails with "Identity Pool does not exist".
+  depends_on = [google_container_cluster.autopilot]
 }
