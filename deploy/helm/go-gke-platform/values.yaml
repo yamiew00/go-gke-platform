@@ -1,0 +1,44 @@
+# CI overrides image.repository, image.tag (the commit SHA), and config.projectId.
+image:
+  repository: asia-east1-docker.pkg.dev/go-gke-platform/apps/go-gke-platform
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  # Must match the Kubernetes service account that Terraform lets read the secret
+  # (infra/platform: var.app_namespace / var.app_name).
+  name: go-gke-platform
+
+config:
+  projectId: go-gke-platform
+  secretName: demo-api-key
+  shutdownDelay: 5s
+
+# Used only when autoscaling is disabled.
+replicaCount: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Autopilot bills by resource requests, so keep them explicit and small.
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    memory: 256Mi
+
+service:
+  # ClusterIP by default. LoadBalancer exposes the app publicly and adds a billed forwarding rule.
+  type: ClusterIP
+  port: 80
+
+# Must exceed config.shutdownDelay plus the app's shutdown timeout (15s by default).
+terminationGracePeriodSeconds: 30

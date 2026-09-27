@@ -1,0 +1,40 @@
+# `helm test` runs this pod after a deploy: the release only counts as good if the
+# Service answers /readyz from inside the cluster.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "app.name" . }}-smoke-test
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: curlimages/curl:8.22.0
+      args:
+        - --fail
+        - --silent
+        - --show-error
+        - --retry
+        - "5"
+        - --retry-connrefused
+        - http://{{ include "app.name" . }}:{{ .Values.service.port }}/readyz
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

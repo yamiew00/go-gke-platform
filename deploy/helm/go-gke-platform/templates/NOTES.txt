@@ -1,0 +1,5 @@
+{{ include "app.name" . }} {{ .Values.image.tag }} is deployed to namespace {{ .Release.Namespace }}.
+
+Try it from your machine:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "app.name" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/

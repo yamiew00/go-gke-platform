@@ -1,0 +1,6 @@
+apiVersion: v2
+name: go-gke-platform
+description: Go service for GKE Autopilot with probes, graceful shutdown, HPA, PDB, and Workload Identity.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
